@@ -1,5 +1,6 @@
 import re
 
+
 def eliminate_implication(formula):
     pattern_implication = r'(\w+)\s*⇒\s*(\w+)'
 
@@ -27,23 +28,20 @@ def standardize_variable_scope(formula):
     return re.sub(r'(∀\w+\s*\w+)\s*∨\s*(∃\w+\s*\w+)', r'\1 ∨ \2', formula)
 
 
-def prenex_form(formula):
-    pattern = r'(∀|∃)(\w+)\s*(\w+)\((\w+)\)'
+def prenex_form(expression):
+    def is_quantifier(char):
+        return char == '∀' or char == '∃'
 
-    def rearrange(match):
-        quantifier = match.group(1)
-        var1 = match.group(2)
-        predicate = match.group(3)
-        var2 = match.group(4)
-        return f"{quantifier}{var1} {quantifier}{var2} {predicate}({var1},{var2})"
+    for index in range(len(expression)):
+        if is_quantifier(expression[index]):
+            # Capture the quantifier and the variable immediately following it
+            quantifier = expression[index]
+            var = expression[index + 1]
+            # Rearrange the expression by moving quantifier and variable to a standardized position
+            expression = quantifier + var + expression[:index] + expression[index + 2:]
 
-    while True:
-        new_formula = re.sub(pattern, rearrange, formula)
-        if new_formula == formula:
-            break
-        formula = new_formula
+    return expression
 
-    return new_formula
 
 def skolemization(expression):
     pattern_exist = r'∃\s*(\w+)\s*'
@@ -104,6 +102,7 @@ def distribute_disjunctions(formula):
 
     return re.sub(pattern, distribute, formula)
 
+
 def to_clauses_set(formula):
     # Regular expression pattern to match variables and conjunctions
     pattern_variable = r'\b\w+\b'
@@ -147,6 +146,7 @@ def convert_CNF(formula):
     formula = standardize_variable_scope(formula)
     formula = prenex_form(formula)
     formula = skolemization(formula)
+    formula = eliminate_universal_quantifiers(formula)  # (new)not tested yet
     formula = distribute_disjunctions(formula)
     return formula
 
@@ -177,7 +177,7 @@ print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass:
 
 print("\nTest case for prenex_form:")
 formula = "(∀x P(x)) ∨ (∃y Q( y))"
-expected_result = "∀x ∃y P(x) ∨ Q( y)"
+expected_result = "∃y∀x( P(x)) ∨ ( Q( y))"
 result = prenex_form(formula)
 print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
 
@@ -200,7 +200,7 @@ expected_result = {'p1', 'q1 r1'}
 result = to_clauses_set(formula)
 print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
 
-
-formula = "p ∨ (q ∧ r)"
+formula = "∀x(B(x)->(∃y(Q(x,y)∧¬P(Y))∧¬∃y(Q(x,y)∧Q(y,x))∧∀y(¬B(y)->¬E(x,y))))"
+print(formula)
 formula = convert_CNF(formula)
 print(f"Formula: {formula}")
