@@ -1,0 +1,206 @@
+import re
+
+def eliminate_implication(formula):
+    pattern_implication = r'(\w+)\s*⇒\s*(\w+)'
+
+    def replace_implication(match):
+        antecedent = match.group(1)
+        consequent = match.group(2)
+        return f'(¬{antecedent} ∨ {consequent})'
+
+    return re.sub(pattern_implication, replace_implication, formula)
+
+
+def move_negation_inward(formula):
+    formula = re.sub(r'¬\(\s*(\w+)\s*∧\s*(\w+)\s*\)', r'(¬\1 ∨ ¬\2)', formula)
+    formula = re.sub(r'¬\(\s*(\w+)\s*∨\s*(\w+)\s*\)', r'(¬\1 ∧ ¬\2)', formula)
+    formula = re.sub(r'¬∀\s*(\w+)\s*(\w+)', r'∃\1 ¬\2', formula)
+    formula = re.sub(r'¬∃\s*(\w+)\s*(\w+)', r'∀\1 ¬\2', formula)
+    return formula
+
+
+def remove_double_not(formula):
+    return re.sub(r'¬¬(\w+)', r'\1', formula)
+
+
+def standardize_variable_scope(formula):
+    return re.sub(r'(∀\w+\s*\w+)\s*∨\s*(∃\w+\s*\w+)', r'\1 ∨ \2', formula)
+
+
+def prenex_form(formula):
+    pattern = r'(∀|∃)(\w+)\s*(\w+)\((\w+)\)'
+
+    def rearrange(match):
+        quantifier = match.group(1)
+        var1 = match.group(2)
+        predicate = match.group(3)
+        var2 = match.group(4)
+        return f"{quantifier}{var1} {quantifier}{var2} {predicate}({var1},{var2})"
+
+    while True:
+        new_formula = re.sub(pattern, rearrange, formula)
+        if new_formula == formula:
+            break
+        formula = new_formula
+
+    return new_formula
+
+def skolemization(expression):
+    pattern_exist = r'∃\s*(\w+)\s*'
+    pattern_forall = r'∀\s*(\w+)\s*'
+    pattern_c_y = r'(\w+)\(y\)'
+
+    def replace_c_y(match):
+        prefix = match.group(1)
+        return f'{prefix}({replacement_char})'
+
+    exist_present = re.search(pattern_exist, expression)
+
+    if exist_present:
+        variable = exist_present.group(1)
+        replacement_char = f'B'
+    else:
+        replacement_char = None
+
+    if replacement_char is None:
+        return expression
+
+    modified_expression = re.sub(pattern_exist, '', expression)
+    modified_expression = re.sub(pattern_c_y, replace_c_y, modified_expression)
+
+    return modified_expression
+
+
+def eliminate_universal_quantifiers(formula):
+    pattern_forall = r'∀\s*(\w+)\s*'
+    pattern_c_y = r'(\w+)\(y\)'
+
+    def replace_c_y(match):
+        nonlocal skolem_constants
+        prefix = match.group(1)
+        skolem_constant = skolem_constants.pop(0)
+        return f'{prefix}({skolem_constant})'
+
+    forall_variables = re.findall(pattern_forall, formula)
+
+    skolem_constants = [f'B{i}' for i in range(len(forall_variables))]
+
+    modified_formula = formula
+    for var, const in zip(forall_variables, skolem_constants):
+        modified_formula = re.sub(rf'\b{var}\b', const, modified_formula)
+
+    modified_formula = re.sub(pattern_c_y, replace_c_y, modified_formula)
+    modified_formula = re.sub(pattern_forall, '', modified_formula)
+
+    return modified_formula
+
+
+def distribute_disjunctions(formula):
+    pattern = r'(\w+)\s*∨\s*\((\w+)\s*∧\s*(\w+)\)'
+
+    def distribute(match):
+        p, q, r = match.groups()
+        return f'({p} ∨ {q}) ∧ ({p} ∨ {r})'
+
+    return re.sub(pattern, distribute, formula)
+
+def to_clauses_set(formula):
+    # Regular expression pattern to match variables and conjunctions
+    pattern_variable = r'\b\w+\b'
+    pattern_disjunction = r'∨'
+    pattern_conjunction = r'∧'
+
+    # Function to rename variables
+    def rename_variables(clause):
+        # Dictionary to map old variable names to new ones
+        var_mapping = {}
+        new_clause = ""
+        for term in re.findall(pattern_variable, clause):
+            if term not in var_mapping:
+                var_mapping[term] = f"{term}1"  # Append '1' to the variable name
+            new_term = var_mapping[term]
+            new_clause += new_term + " "
+        return new_clause.strip()
+
+    # Split the formula into separate clauses
+    clauses = re.split(pattern_disjunction, formula)
+
+    # Split each clause into separate predicates
+    clauses_predicates = []
+    for clause in clauses:
+        predicates = re.split(pattern_conjunction, clause)
+        clauses_predicates.append(predicates)
+
+    # Rename variables in each clause and add to a set
+    clauses_set = set()
+    for predicates in clauses_predicates:
+        renamed_predicates = [rename_variables(predicate) for predicate in predicates if predicate.strip()]
+        clauses_set.add(' '.join(renamed_predicates))
+
+    return clauses_set
+
+
+def convert_CNF(formula):
+    formula = eliminate_implication(formula)
+    formula = move_negation_inward(formula)
+    formula = remove_double_not(formula)
+    formula = standardize_variable_scope(formula)
+    formula = prenex_form(formula)
+    formula = skolemization(formula)
+    formula = distribute_disjunctions(formula)
+    return formula
+
+
+print("Test case for eliminate_implication:")
+formula = "p ⇒ q"
+expected_result = "(¬p ∨ q)"
+result = eliminate_implication(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+print("\nTest case for move_negation_inward:")
+formula = "¬(p ∧ q)"
+expected_result = "(¬p ∨ ¬q)"
+result = move_negation_inward(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+print("\nTest case for remove_double_not:")
+formula = "¬¬p"
+expected_result = "p"
+result = remove_double_not(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+print("\nTest case for standardize_variable_scope:")
+formula = "(∀x P(x)) ∨ (∃y Q(y))"
+expected_result = "(∀x P(x)) ∨ (∃y Q(y))"
+result = standardize_variable_scope(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+print("\nTest case for prenex_form:")
+formula = "(∀x P(x)) ∨ (∃y Q( y))"
+expected_result = "∀x ∃y P(x) ∨ Q( y)"
+result = prenex_form(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+print("\nTest case for skolemization:")
+formula = "∃y P(A) ∨ Q(y)"
+expected_result = "P(A) ∨ Q(B)"
+result = skolemization(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+print("\nTest case for distribute_disjunctions:")
+formula = "p ∨ (q ∧ r)"
+expected_result = "(p ∨ q) ∧ (p ∨ r)"
+result = distribute_disjunctions(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+# Test the function with the given formula
+print("\nTest case for to_clauses_set:")
+formula = "p ∨ (q ∧ r)"
+expected_result = {'p1', 'q1 r1'}
+result = to_clauses_set(formula)
+print(f"Formula: {formula}, Result: {result}, Expected: {expected_result}, Pass: {result == expected_result}")
+
+
+formula = "p ∨ (q ∧ r)"
+formula = convert_CNF(formula)
+print(f"Formula: {formula}")
